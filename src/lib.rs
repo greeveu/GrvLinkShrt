@@ -1,8 +1,8 @@
 use std::str;
 
 use serde::{Deserialize, Serialize};
-use worker::wasm_bindgen::JsValue;
 use worker::*;
+use worker::wasm_bindgen::JsValue;
 
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
@@ -38,7 +38,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .get_async("/list", |_, ctx| async move {
             let db: D1Database = ctx.env.d1("DB")?;
 
-            let statement = db.prepare("SELECT * FROM grv_links");
+            let statement = db.prepare("SELECT * FROM grv_links WHERE unlisted = 0");
 
             let d1_results = statement.all().await?;
             let link_results = d1_results.results::<Link>()?;
@@ -77,8 +77,12 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 let db: D1Database = ctx.env.d1("DB")?;
 
                 let statement = db
-                    .prepare("INSERT INTO grv_links(`key`, `long_url`, `clicks`) VALUES (?,?,?)")
-                    .bind(&[JsValue::from(result.key.as_str()), JsValue::from(result.long_url.as_str()), JsValue::from(result.clicks.to_string().as_str())])?;
+                    .prepare("INSERT INTO grv_links(`key`, `long_url`, `clicks`, `unlisted`) VALUES (?,?,?,?)")
+                    .bind(&[
+                        JsValue::from(result.key.as_str()),
+                        JsValue::from(result.long_url.as_str()),
+                        JsValue::from(result.clicks.to_string()),
+                        JsValue::from(result.unlisted.unwrap())])?;
 
                 return match statement.run().await {
                     Ok(_) => Response::ok("OK"),
@@ -101,8 +105,15 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 let db: D1Database = ctx.env.d1("DB")?;
 
                 let statement = db
-                    .prepare("INSERT INTO grv_links(`key`, `long_url`, `clicks`) VALUES (?,?,?) ON CONFLICT(`key`) DO UPDATE SET `long_url` = ?, `clicks` = ?")
-                    .bind(&[JsValue::from(result.key.as_str()), JsValue::from(result.long_url.as_str()), JsValue::from(result.clicks.to_string().as_str()), JsValue::from(result.long_url.as_str()), JsValue::from(result.clicks.to_string().as_str())])?;
+                    .prepare("INSERT INTO grv_links(`key`, `long_url`, `clicks`, `unlisted`) VALUES (?,?,?,?) ON CONFLICT(`key`) DO UPDATE SET `long_url` = ?, `clicks` = ?, `unlisted` = ?")
+                    .bind(&[
+                        JsValue::from(result.key.as_str()),
+                        JsValue::from(result.long_url.as_str()),
+                        JsValue::from(result.clicks.to_string()),
+                        JsValue::from(result.unlisted.unwrap()),
+                        JsValue::from(result.long_url.as_str()),
+                        JsValue::from(result.clicks.to_string()),
+                        JsValue::from(result.unlisted.unwrap())])?;
 
                 return match statement.run().await {
                     Ok(_) => Response::ok("OK"),
@@ -171,4 +182,6 @@ struct Link {
     key: String,
     long_url: String,
     clicks: usize,
+    #[serde(skip_serializing)]
+    unlisted: Option<u8>
 }
