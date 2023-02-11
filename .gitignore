@@ -9,3 +9,6 @@ build/
 /dist
 
 .idea/
+
+Cargo.lock
+package-lock.json
