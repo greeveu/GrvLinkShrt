@@ -97,7 +97,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
                 return match statement.run().await {
                     Ok(_) => Ok(build_response("OK", 200)?.with_headers(build_headers()?)),
-                    Err(_) => Ok(build_response(format!("Database error!").as_str(), 500)?.with_headers(build_headers()?))
+                    Err(_) => Ok(build_response("Database error!", 500)?.with_headers(build_headers()?))
                 };
             }
 
@@ -128,7 +128,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
                 return match statement.run().await {
                     Ok(_) => Ok(build_response("OK", 200)?.with_headers(build_headers()?)),
-                    Err(_) => Ok(build_response(format!("Database error!").as_str(), 500)?.with_headers(build_headers()?))
+                    Err(_) => Ok(build_response("Database error!", 500)?.with_headers(build_headers()?))
                 };
             }
 
