@@ -1,16 +1,17 @@
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::str;
 
 use serde::{Deserialize, Serialize};
-use worker::*;
 use worker::wasm_bindgen::JsValue;
+use worker::*;
 
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let router = Router::new();
 
     router
-        .get("/", |_, _| Response::ok("OK"))
+        .get("/", |_, _| build_response("OK", 200))
         .get_async("/redirect/:key", |_, ctx| async move {
             if let Some(key) = ctx.param("key") {
                 let db: D1Database = ctx.env.d1("DB")?;
@@ -23,7 +24,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
                 return match results {
                     None => {
-                        Response::error("URL Unknown", 404)
+                        Ok(build_response("URL Unknown", 404)?.with_headers(build_headers()?))
                     }
                     Some(url) => {
                         let d1result = increment_link_clicks(key, &db).await?;
@@ -34,7 +35,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                     }
                 };
             }
-            Response::error("Key Missing", 400)
+            Ok(build_response("Key Missing", 400)?.with_headers(build_headers()?))
         })
         .get_async("/list", |req, ctx| async move {
             let db: D1Database = ctx.env.d1("DB")?;
@@ -53,7 +54,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             let d1_results = statement.all().await?;
             let link_results = d1_results.results::<Link>()?;
 
-            Response::ok(serde_json::to_string(link_results.as_slice())?)
+            Ok(build_response(serde_json::to_string(link_results.as_slice())?.as_str(), 200)?.with_headers(build_headers()?))
         })
         .get_async("/info/:key", |_, ctx| async move {
             if let Some(key) = ctx.param("key") {
@@ -68,11 +69,11 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 let result = results.results::<Link>()?;
 
                 return match result.get(0) {
-                    None => return Response::error("Key not found", 404),
-                    Some(url) => Response::ok(serde_json::to_string(url)?),
+                    None => return Ok(build_response("Key not found", 404)?.with_headers(build_headers()?)),
+                    Some(url) => Ok(build_response(serde_json::to_string(url)?.as_str(), 200)?.with_headers(build_headers()?)),
                 };
             }
-            Response::error("Key Missing", 400)
+            Ok(build_response("Key Missing", 400)?.with_headers(build_headers()?))
         })
         .put_async("/", |mut req, ctx| async move {
             if let Some(err) = check_apikey(&req, &ctx) {
@@ -95,12 +96,12 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                         JsValue::from(result.unlisted.unwrap())])?;
 
                 return match statement.run().await {
-                    Ok(_) => Response::ok("OK"),
-                    Err(err) => Response::error(format!("Database error! {err:?}"), 500)
+                    Ok(_) => Ok(build_response("OK", 200)?.with_headers(build_headers()?)),
+                    Err(_) => Ok(build_response(format!("Database error!").as_str(), 500)?.with_headers(build_headers()?))
                 };
             }
 
-            Response::error("Invalid data send", 500)
+            Ok(build_response("Invalid data send", 500)?.with_headers(build_headers()?))
         })
         .patch_async("/", |mut req, ctx| async move {
             if let Some(err) = check_apikey(&req, &ctx) {
@@ -126,12 +127,12 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                         JsValue::from(result.unlisted.unwrap())])?;
 
                 return match statement.run().await {
-                    Ok(_) => Response::ok("OK"),
-                    Err(err) => Response::error(format!("Database error! {err:?}"), 500)
+                    Ok(_) => Ok(build_response("OK", 200)?.with_headers(build_headers()?)),
+                    Err(_) => Ok(build_response(format!("Database error!").as_str(), 500)?.with_headers(build_headers()?))
                 };
             }
 
-            Response::error("Invalid data send", 500)
+            Ok(build_response("Invalid data send", 500)?.with_headers(build_headers()?))
         })
         .delete_async("/:key", |req, ctx| async move {
             if let Some(err) = check_apikey(&req, &ctx) {
@@ -147,32 +148,47 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
                 let results = statement.run().await?;
                 return if results.success() {
-                    Response::ok("Link deleted")
+                    Ok(build_response("Link deleted", 200)?.with_headers(build_headers()?))
                 } else {
-                    Response::error("Can not delete link", 500)
+                    Ok(build_response("Can not delete link", 500)?.with_headers(build_headers()?))
                 };
             }
-            Response::error("Key Missing", 400)
+            Ok(build_response("Key Missing", 400)?.with_headers(build_headers()?))
         })
         .run(req, env)
         .await
 }
 
+fn build_headers() -> Result<Headers> {
+    let mut headers = Headers::new();
+    headers.set("Access-Control-Allow-Origin", "*")?;
+    Ok(headers)
+}
+
+fn build_response(msg: &str, status_code: u16) -> Result<Response> {
+    let mut response = Response::ok(msg)?;
+
+    response = response.with_headers(build_headers()?);
+    response = response.with_status(status_code);
+
+    Ok(response)
+}
+
 fn check_apikey(req: &Request, ctx: &RouteContext<()>) -> Option<Result<Response>> {
     let secret_apikey = ctx.secret("APIKEY");
     if secret_apikey.is_err() {
-        return Some(Response::error("Unable to get APIKey", 500));
+        return Some(build_response("Unable to get APIKey", 500));
     }
     let header_apikey = req.headers().get("APIKEY");
     if header_apikey.is_err() {
-        return Some(Response::error("APIKEY missing", 401));
+        return Some(build_response("APIKEY missing", 401));
     }
 
     match header_apikey.unwrap() {
-        None => Some(Response::error("APIKEY missing", 401)),
+        None => Some(build_response("APIKEY missing", 401)),
         Some(option_header) => {
             if secret_apikey.unwrap().to_string().ne(&option_header) {
-                return Some(Response::error("APIKEY invalid", 401));
+                return Some(build_response("APIKEY invalid", 401));
             }
             None
         }
