@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::str;
 
 use serde::{Deserialize, Serialize};
@@ -35,10 +36,19 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             }
             Response::error("Key Missing", 400)
         })
-        .get_async("/list", |_, ctx| async move {
+        .get_async("/list", |req, ctx| async move {
             let db: D1Database = ctx.env.d1("DB")?;
+            let hash_query: HashMap<_, _> = req.url().unwrap().query_pairs().into_owned().collect();
 
-            let statement = db.prepare("SELECT * FROM grv_links WHERE unlisted = 0");
+            let statement = if hash_query.get("show_unlisted").unwrap_or(&"false".to_string()).eq("true") {
+                if let Some(err) = check_apikey(&req, &ctx) {
+                    return err;
+                }
+                db.prepare("SELECT * FROM grv_links")
+            } else {
+                db.prepare("SELECT * FROM grv_links WHERE unlisted = 0")
+            };
+
 
             let d1_results = statement.all().await?;
             let link_results = d1_results.results::<Link>()?;
@@ -183,5 +193,5 @@ struct Link {
     long_url: String,
     clicks: usize,
     #[serde(skip_serializing)]
-    unlisted: Option<u8>
+    unlisted: Option<u8>,
 }
