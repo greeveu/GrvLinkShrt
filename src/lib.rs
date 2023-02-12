@@ -1,5 +1,8 @@
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::str;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use worker::wasm_bindgen::JsValue;
@@ -8,6 +11,7 @@ use worker::*;
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let router = Router::new();
+    let decoding_key = DecodingKey::from_rsa_pem(public_key).unwrap();
 
     router
         .get("/", |_, _| build_response("OK", 200))
@@ -194,6 +198,38 @@ fn check_apikey(req: &Request, ctx: &RouteContext<()>) -> Option<Result<Response
     }
 }
 
+fn check_jwt(req: &Request, ctx: &RouteContext<()>, required_permission: Permission) -> Option<Result<Response>> {
+    let public_key = ctx.var("JWT_PUBLIC_KEY");
+    if public_key.is_err() {
+        return Some(build_response("Unable to authenticate request.", 500));
+    }
+
+    let token = req.headers().get("Bearer");
+    if token.is_err() || token.as_ref().unwrap().is_none() {
+        return Some(build_response("JWT missing", 401));
+    }
+
+    let token_message = decode::<User>(
+        &token.unwrap().unwrap(),
+        &DecodingKey::from_secret("secret".as_ref()),
+        &Validation::new(Algorithm::ES256),
+    );
+    if token_message.is_err() {
+        return Some(build_response("JWT invalid.", 401));
+    }
+
+    let token_data = token_message.unwrap();
+
+    //We can unwrap here since I don't think SystemTime::now() will ever return a time before UNIX_EPOCH.
+    let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    if token_data.claims.valid_until < duration.as_secs() ||
+        !token_data.claims.permission.contains(&required_permission) {
+        return Some(build_response("JWT invalid.", 401));
+    }
+
+    None
+}
+
 async fn increment_link_clicks(key: &String, database: &D1Database) -> Result<D1Result> {
     let statement = database
         .prepare("UPDATE grv_links SET `clicks`=`clicks` + 1 WHERE `key` = ?")
@@ -209,4 +245,19 @@ struct Link {
     clicks: usize,
     #[serde(skip_serializing)]
     unlisted: Option<u8>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct User {
+    id: String,
+    permission: Vec<Permission>,
+    //Unix Timestamp
+    valid_until: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+enum Permission {
+    Read,
+    Write,
+    Delete,
 }
