@@ -32,9 +32,7 @@ async fn redirect(_: Request, ctx: RouteContext<()>) -> Result<Response> {
         let results: Option<String> = statement.first(Some("long_url")).await?;
 
         return match results {
-            None => {
-                Ok(build_response("URL Unknown", 404)?.with_headers(build_headers()?))
-            }
+            None => Ok(build_response("URL Unknown", 404)?.with_headers(build_headers()?)),
             Some(url) => {
                 let d1result = increment_link_clicks(key, &db).await?;
                 if !d1result.success() {
@@ -51,7 +49,11 @@ async fn list_links(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db: D1Database = ctx.env.d1("DB")?;
     let hash_query: HashMap<_, _> = req.url().unwrap().query_pairs().into_owned().collect();
 
-    let statement = if hash_query.get("show_unlisted").unwrap_or(&"false".to_string()).eq("true") {
+    let statement = if hash_query
+        .get("show_unlisted")
+        .unwrap_or(&"false".to_string())
+        .eq("true")
+    {
         if let Some(err) = check_apikey(&req, &ctx) {
             return err;
         }
@@ -60,11 +62,14 @@ async fn list_links(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         db.prepare("SELECT * FROM grv_links WHERE unlisted = 0")
     };
 
-
     let d1_results = statement.all().await?;
     let link_results = d1_results.results::<Link>()?;
 
-    Ok(build_response(serde_json::to_string(link_results.as_slice())?.as_str(), 200)?.with_headers(build_headers()?))
+    Ok(build_response(
+        serde_json::to_string(link_results.as_slice())?.as_str(),
+        200,
+    )?
+    .with_headers(build_headers()?))
 }
 
 async fn link_info(_: Request, ctx: RouteContext<()>) -> Result<Response> {
@@ -81,7 +86,8 @@ async fn link_info(_: Request, ctx: RouteContext<()>) -> Result<Response> {
 
         return match result.get(0) {
             None => return Ok(build_response("Key not found", 404)?.with_headers(build_headers()?)),
-            Some(url) => Ok(build_response(serde_json::to_string(url)?.as_str(), 200)?.with_headers(build_headers()?)),
+            Some(url) => Ok(build_response(serde_json::to_string(url)?.as_str(), 200)?
+                .with_headers(build_headers()?)),
         };
     }
     Ok(build_response("Key Missing", 400)?.with_headers(build_headers()?))
@@ -100,16 +106,19 @@ async fn add_link(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         let db: D1Database = ctx.env.d1("DB")?;
 
         let statement = db
-            .prepare("INSERT INTO grv_links(`key`, `long_url`, `clicks`, `unlisted`) VALUES (?,?,?,?)")
+            .prepare(
+                "INSERT INTO grv_links(`key`, `long_url`, `clicks`, `unlisted`) VALUES (?,?,?,?)",
+            )
             .bind(&[
                 JsValue::from(result.key.as_str()),
                 JsValue::from(result.long_url.as_str()),
                 JsValue::from(result.clicks.to_string()),
-                JsValue::from(result.unlisted.unwrap())])?;
+                JsValue::from(result.unlisted.unwrap()),
+            ])?;
 
         return match statement.run().await {
             Ok(_) => Ok(build_response("OK", 200)?.with_headers(build_headers()?)),
-            Err(_) => Ok(build_response("Database error!", 500)?.with_headers(build_headers()?))
+            Err(_) => Ok(build_response("Database error!", 500)?.with_headers(build_headers()?)),
         };
     }
 
@@ -163,7 +172,7 @@ async fn patch_link(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
 
         return match statement.run().await {
             Ok(_) => Ok(build_response("OK", 200)?.with_headers(build_headers()?)),
-            Err(_) => Ok(build_response("Database error!", 500)?.with_headers(build_headers()?))
+            Err(_) => Ok(build_response("Database error!", 500)?.with_headers(build_headers()?)),
         };
     }
 
