@@ -3,8 +3,7 @@ main = "build/worker/shim.mjs"
 compatibility_date = "2022-11-28"
 
 [env.dev]
-name = "grv-link-shrt-int"
-route = "grv-link-shrt-int"
+route = "grv-link-shrt.int.pluoi.com/*"
 
 [build]
 command = "cargo install --git https://github.com/cloudflare/workers-rs worker-build && worker-build --release"

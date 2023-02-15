@@ -59,7 +59,7 @@ async fn list_links(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         }
         db.prepare("SELECT * FROM grv_links")
     } else {
-        db.prepare("SELECT * FROM grv_links WHERE unlisted = 0")
+        db.prepare("SELECT key, long_url FROM grv_links WHERE unlisted = 0")
     };
 
     let d1_results = statement.all().await?;
@@ -71,13 +71,17 @@ async fn list_links(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     )
 }
 
-async fn link_info(_: Request, ctx: RouteContext<()>) -> Result<Response> {
+async fn link_info(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     if let Some(key) = ctx.param("key") {
         let db: D1Database = ctx.env.d1("DB")?;
 
-        let statement = db
-            .prepare("SELECT * FROM grv_links WHERE key = ?")
-            .bind(&[JsValue::from(key)])?;
+        let statement = if check_apikey(&req, &ctx).is_none() {
+            db.prepare("SELECT * FROM grv_links WHERE key = ?")
+                .bind(&[JsValue::from(key)])?
+        } else {
+            db.prepare("SELECT key, long_url FROM grv_links WHERE key = ?")
+                .bind(&[JsValue::from(key)])?
+        };
 
         let results = statement.all().await?;
 
@@ -110,8 +114,8 @@ async fn add_link(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
             .bind(&[
                 JsValue::from(result.key.as_str()),
                 JsValue::from(result.long_url.as_str()),
-                JsValue::from(result.clicks.to_string()),
-                JsValue::from(result.unlisted.unwrap()),
+                JsValue::from(result.clicks.unwrap_or_default().to_string()),
+                JsValue::from(result.unlisted.unwrap_or_default()),
             ])?;
 
         return match statement.run().await {
@@ -162,11 +166,11 @@ async fn patch_link(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
             .bind(&[
                 JsValue::from(result.key.as_str()),
                 JsValue::from(result.long_url.as_str()),
-                JsValue::from(result.clicks.to_string()),
+                JsValue::from(result.clicks.unwrap_or_default()),
                 JsValue::from(result.unlisted.unwrap()),
                 JsValue::from(result.long_url.as_str()),
-                JsValue::from(result.clicks.to_string()),
-                JsValue::from(result.unlisted.unwrap())])?;
+                JsValue::from(result.clicks.unwrap_or_default()),
+                JsValue::from(result.unlisted.unwrap_or_default())])?;
 
         return match statement.run().await {
             Ok(_) => build_response("OK", 200),
@@ -225,7 +229,8 @@ async fn increment_link_clicks(key: &String, database: &D1Database) -> Result<D1
 struct Link {
     key: String,
     long_url: String,
-    clicks: usize,
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing_if="Option::is_none")]
+    clicks: Option<usize>,
+    #[serde(skip_serializing_if="Option::is_none")]
     unlisted: Option<u8>,
 }
