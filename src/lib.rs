@@ -32,7 +32,7 @@ async fn redirect(_: Request, ctx: RouteContext<()>) -> Result<Response> {
         let results: Option<String> = statement.first(Some("long_url")).await?;
 
         return match results {
-            None => Ok(build_response("URL Unknown", 404)?.with_headers(build_headers()?)),
+            None => build_response("URL Unknown", 404),
             Some(url) => {
                 let d1result = increment_link_clicks(key, &db).await?;
                 if !d1result.success() {
@@ -42,7 +42,7 @@ async fn redirect(_: Request, ctx: RouteContext<()>) -> Result<Response> {
             }
         };
     }
-    Ok(build_response("Key Missing", 400)?.with_headers(build_headers()?))
+    build_response("Key Missing", 400)
 }
 
 async fn list_links(req: Request, ctx: RouteContext<()>) -> Result<Response> {
@@ -65,11 +65,10 @@ async fn list_links(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let d1_results = statement.all().await?;
     let link_results = d1_results.results::<Link>()?;
 
-    Ok(build_response(
+    build_response(
         serde_json::to_string(link_results.as_slice())?.as_str(),
         200,
-    )?
-    .with_headers(build_headers()?))
+    )
 }
 
 async fn link_info(_: Request, ctx: RouteContext<()>) -> Result<Response> {
@@ -85,12 +84,11 @@ async fn link_info(_: Request, ctx: RouteContext<()>) -> Result<Response> {
         let result = results.results::<Link>()?;
 
         return match result.get(0) {
-            None => return Ok(build_response("Key not found", 404)?.with_headers(build_headers()?)),
-            Some(url) => Ok(build_response(serde_json::to_string(url)?.as_str(), 200)?
-                .with_headers(build_headers()?)),
+            None => return build_response("Key not found", 404),
+            Some(url) => build_response(serde_json::to_string(url)?.as_str(), 200),
         };
     }
-    Ok(build_response("Key Missing", 400)?.with_headers(build_headers()?))
+    build_response("Key Missing", 400)
 }
 
 async fn add_link(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
@@ -117,12 +115,12 @@ async fn add_link(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
             ])?;
 
         return match statement.run().await {
-            Ok(_) => Ok(build_response("OK", 200)?.with_headers(build_headers()?)),
-            Err(_) => Ok(build_response("Database error!", 500)?.with_headers(build_headers()?)),
+            Ok(_) => build_response("OK", 200),
+            Err(_) => build_response("Database error!", 500),
         };
     }
 
-    Ok(build_response("Invalid data send", 500)?.with_headers(build_headers()?))
+    build_response("Invalid data send", 500)
 }
 
 async fn delete_link(req: Request, ctx: RouteContext<()>) -> Result<Response> {
@@ -139,12 +137,12 @@ async fn delete_link(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
         let results = statement.run().await?;
         return if results.success() {
-            Ok(build_response("Link deleted", 200)?.with_headers(build_headers()?))
+            build_response("Link deleted", 200)
         } else {
-            Ok(build_response("Can not delete link", 500)?.with_headers(build_headers()?))
+            build_response("Can not delete link", 500)
         };
     }
-    Ok(build_response("Key Missing", 400)?.with_headers(build_headers()?))
+    build_response("Key Missing", 400)
 }
 
 async fn patch_link(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
@@ -171,27 +169,27 @@ async fn patch_link(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
                 JsValue::from(result.unlisted.unwrap())])?;
 
         return match statement.run().await {
-            Ok(_) => Ok(build_response("OK", 200)?.with_headers(build_headers()?)),
-            Err(_) => Ok(build_response("Database error!", 500)?.with_headers(build_headers()?)),
+            Ok(_) => build_response("OK", 200),
+            Err(_) => build_response("Database error!", 500),
         };
     }
 
-    Ok(build_response("Invalid data send", 500)?.with_headers(build_headers()?))
+    build_response("Invalid data send", 500)
 }
 
-fn build_headers() -> Result<Headers> {
+fn build_headers(status_code: u16) -> Result<Headers> {
     let mut headers = Headers::new();
-    headers.set("Access-Control-Allow-Origin", "*")?;
+    if (200..=299).contains(&status_code) {
+        headers.set("Content-Type", "application/json")?;
+    }
     Ok(headers)
 }
 
 fn build_response(msg: &str, status_code: u16) -> Result<Response> {
-    let mut response = Response::ok(msg)?;
-
-    response = response.with_headers(build_headers()?);
-    response = response.with_status(status_code);
-
-    Ok(response)
+    Response::ok(msg)?
+        .with_headers(build_headers(status_code)?)
+        .with_status(status_code)
+        .with_cors(&Cors::new().with_origins(vec!["*"]))
 }
 
 fn check_apikey(req: &Request, ctx: &RouteContext<()>) -> Option<Result<Response>> {
