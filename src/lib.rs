@@ -47,7 +47,7 @@ async fn redirect(_: Request, ctx: RouteContext<()>) -> Result<Response> {
 
 async fn list_links(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db: D1Database = ctx.env.d1("DB")?;
-    let hash_query: HashMap<_, _> = req.url().unwrap().query_pairs().into_owned().collect();
+    let hash_query: HashMap<_, _> = req.url()?.query_pairs().into_owned().collect();
 
     let statement = if hash_query
         .get("show_unlisted")
@@ -167,7 +167,7 @@ async fn patch_link(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
                 JsValue::from(result.key.as_str()),
                 JsValue::from(result.long_url.as_str()),
                 JsValue::from(result.clicks.unwrap_or_default()),
-                JsValue::from(result.unlisted.unwrap()),
+                JsValue::from(result.unlisted.unwrap_or_default()),
                 JsValue::from(result.long_url.as_str()),
                 JsValue::from(result.clicks.unwrap_or_default()),
                 JsValue::from(result.unlisted.unwrap_or_default())])?;
