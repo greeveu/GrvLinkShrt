@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str;
 
 use serde::{Deserialize, Serialize};
-use worker::wasm_bindgen::JsValue;
+use wasm_bindgen::JsValue;
 use worker::*;
 
 #[event(fetch)]

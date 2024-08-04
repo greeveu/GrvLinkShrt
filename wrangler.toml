@@ -6,13 +6,16 @@ compatibility_date = "2022-11-28"
 route = "grv-link-shrt.int.pluoi.com/*"
 
 [build]
-command = "cargo install --git https://github.com/cloudflare/workers-rs worker-build && worker-build --release"
+command = "cargo install -q worker-build && worker-build --release"
 
-[[ d1_databases ]]
+[build.upload]
+format = "modules"
+
+[[d1_databases]]
 binding = "DB"
-database_name = "greev"
-database_id = "806be8bc-f302-4557-b691-837a91ec9d00"
-preview_database_id = "38c5b885-75b9-4f75-b334-41747f3fa556"
+database_name = "links"
+database_id = "8012fb37-862d-4086-aa9e-6b2a1bd43663"
+preview_database_id = "8012fb37-862d-4086-aa9e-6b2a1bd43663"
 
 # read more about configuring your Worker via wrangler.toml at:
 # https://developers.cloudflare.com/workers/cli-wrangler/configuration
